@@ -52,14 +52,10 @@ def is_trade_allowed(day_type, adx):
     if adx is None or pd.isna(adx):
         return False
 
-    # RANGE + controlled MIXED
     return adx < 20
 
 
 def already_traded_today():
-    """
-    Prevent duplicate trades in same day
-    """
 
     if not os.path.exists(LOG_FILE):
         return False
@@ -108,14 +104,16 @@ Target: ₹{trade['pe']['target']}
 
 
 # =====================================================
-# MAIN RUN (GITHUB SAFE)
+# MAIN RUN
 # =====================================================
 
 def run_once():
-   send_message("🚀 TELEGRAM TEST WORKING")
+    # 🔥 TEST MESSAGE
+    send_message("🚀 TELEGRAM TEST WORKING")
+
     print("Running Suryanomics bot (single cycle)\n")
 
-    # ❌ Skip if already traded today
+    # Skip duplicate
     if already_traded_today():
         print("WARNING: Trade already taken today - skipping")
         return
@@ -140,25 +138,21 @@ def run_once():
     print(f"Day Type: {day_type}")
     print(f"ADX: {adx}")
 
-    # ===== FINAL DECISION =====
     if is_trade_allowed(day_type, adx):
 
-        print("✅ TRADE ALLOWED")
+        print("TRADE ALLOWED")
 
         price = row.get("close", 0)
 
         trade = build_short_strangle(price)
 
-        # ✅ Send Telegram
         send_trade_alert(trade)
-
-        # ✅ Log Trade
         log_trade(trade)
 
-        print("📊 Trade logged successfully")
+        print("Trade logged successfully")
 
     else:
-        print("❌ NO TRADE")
+        print("NO TRADE")
 
 
 # =====================================================
