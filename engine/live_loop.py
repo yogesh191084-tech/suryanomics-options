@@ -112,6 +112,7 @@ Target: ₹{trade['pe']['target']}
 # =====================================================
 
 def run_once():
+   send_message("🚀 TELEGRAM TEST WORKING")
     print("Running Suryanomics bot (single cycle)\n")
 
     # ❌ Skip if already traded today
