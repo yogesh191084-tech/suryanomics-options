@@ -1,6 +1,6 @@
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, time
 from collections import Counter
 
 import pandas as pd
@@ -14,9 +14,8 @@ from engine.strategy_selector import select_strategy
 from engine.option_engine import build_short_strangle
 from engine.trade_logger import log_trade
 from engine.exit_engine import check_exit
-from telegram.sender import send_message
 from engine.volatility import is_low_volatility
-from engine.risk_manager import is_daily_loss_exceeded
+from telegram.sender import send_message
 
 
 SYMBOL = "NIFTY"
@@ -48,7 +47,6 @@ def classify_day(regimes):
 
 
 def is_trade_allowed(day_type, adx):
-
     if day_type == "TREND_DAY":
         return False
 
@@ -59,7 +57,6 @@ def is_trade_allowed(day_type, adx):
 
 
 def already_traded_today():
-
     if not os.path.exists(LOG_FILE):
         return False
 
@@ -77,11 +74,19 @@ def already_traded_today():
 
 
 # =====================================================
-# TELEGRAM MESSAGE
+# PRO TIME FILTER
+# =====================================================
+
+def is_market_time():
+    now = datetime.now().time()
+    return time(10, 0) <= now <= time(14, 30)   # 10:00–2:30 PM IST
+
+
+# =====================================================
+# TELEGRAM
 # =====================================================
 
 def send_trade_alert(trade):
-
     msg = f"""
 SURYANOMICS OPTIONS - LIVE TRADE
 
@@ -101,21 +106,28 @@ Entry: Rs {trade['pe']['entry']}
 SL: Rs {trade['pe']['sl']}
 Target: Rs {trade['pe']['target']}
 
-Regime + Volatility filtered execution
+Filtered execution
 """
-    send_message(msg)
+    safe_send(msg)
 
 
-def send_risk_stop_message():
-
-    msg = """
+def send_no_trade_message(regime, adx):
+    msg = f"""
 SURYANOMICS OPTIONS
 
-Daily loss limit hit
+No trade signal
 
-System stopped for today
+Regime: {regime}
+ADX: {round(adx, 2)}
 """
-    send_message(msg)
+    safe_send(msg)
+
+
+def safe_send(message):
+    try:
+        send_message(message)
+    except Exception as e:
+        print("Telegram error:", e)
 
 
 # =====================================================
@@ -130,18 +142,17 @@ def run_once():
         # STEP 1 → EXIT CHECK
         check_exit()
 
-        # STEP 2 → RISK CONTROL
-        if is_daily_loss_exceeded():
-            print("DAILY LOSS LIMIT HIT - STOP TRADING")
-            send_risk_stop_message()
+        # STEP 2 → TIME FILTER
+        if not is_market_time():
+            print("Outside trading window")
             return
 
-        # STEP 3 → PREVENT MULTIPLE TRADES
+        # STEP 3 → DUPLICATE TRADE CHECK
         if already_traded_today():
             print("Trade already taken today - skipping")
             return
 
-        # STEP 4 → FETCH DATA
+        # STEP 4 → DATA
         df = fetch_spot_5m(SYMBOL)
 
         if df is None or df.empty:
@@ -155,7 +166,6 @@ def run_once():
 
         regime = detect_market_regime(row)
         strategy = select_strategy(regime)
-
         day_type = classify_day([regime])
 
         print(f"Regime: {regime}")
@@ -163,17 +173,15 @@ def run_once():
         print(f"Day Type: {day_type}")
         print(f"ADX: {adx}")
 
-        # FINAL ENTRY
+        # STEP 5 → FINAL ENTRY CONDITION
         if (
             strategy == "SHORT_STRANGLE"
             and is_trade_allowed(day_type, adx)
             and is_low_volatility(df)
         ):
-
             print("TRADE ALLOWED")
 
             price = row.get("close", 0)
-
             trade = build_short_strangle(price)
 
             send_trade_alert(trade)
@@ -183,7 +191,7 @@ def run_once():
 
         else:
             print("NO TRADE")
-            # ❌ NO TELEGRAM MESSAGE HERE (FIXED)
+            send_no_trade_message(regime, adx)
 
     except Exception as e:
         print("ERROR:", e)
