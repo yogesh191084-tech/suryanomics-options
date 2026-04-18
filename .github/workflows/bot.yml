@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
   schedule:
-    - cron: "*/5 3-10 * * 1-5"   # Every 5 min (Market hours IST)
+    - cron: "*/5 4-10 * * 1-5"   # 9:30 AM – 3:30 PM IST
 
 jobs:
   run-bot:
