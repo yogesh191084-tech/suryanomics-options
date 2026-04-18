@@ -1,6 +1,6 @@
 import pandas as pd
 import os
-from datetime import datetime
+from datetime import datetime, time
 
 from ingestion.option_chain import get_premium
 from telegram.sender import send_message
@@ -14,7 +14,11 @@ def check_exit():
         print("No trade log found")
         return
 
-    df = pd.read_csv(LOG_FILE)
+    try:
+        df = pd.read_csv(LOG_FILE)
+    except Exception as e:
+        print("Error reading log:", e)
+        return
 
     if df.empty:
         print("No trades")
@@ -23,7 +27,7 @@ def check_exit():
     last_trade = df.iloc[-1]
 
     # Only check OPEN trades
-    if last_trade["status"] != "OPEN":
+    if last_trade.get("status") != "OPEN":
         print("No open trade")
         return
 
@@ -39,9 +43,17 @@ def check_exit():
     ce_target = last_trade["ce_target"]
     pe_target = last_trade["pe_target"]
 
-    # 🔥 LIVE PREMIUM FETCH
-    ce_price = get_premium(ce_strike, "CE")
-    pe_price = get_premium(pe_strike, "PE")
+    # ===== LIVE PREMIUM FETCH =====
+    try:
+        ce_price = get_premium(ce_strike, "CE")
+        pe_price = get_premium(pe_strike, "PE")
+    except Exception as e:
+        print("Premium fetch error:", e)
+        return
+
+    if ce_price is None or pe_price is None:
+        print("Premium data missing")
+        return
 
     exit_reason = None
 
@@ -52,9 +64,9 @@ def check_exit():
     elif ce_price <= ce_target and pe_price <= pe_target:
         exit_reason = "TARGET HIT"
 
-    # Time exit (optional later)
-    # elif datetime.now().time() >= time(15, 15):
-    #     exit_reason = "TIME EXIT"
+    # 🔥 TIME EXIT (MANDATORY)
+    elif datetime.now().time() >= time(15, 15):
+        exit_reason = "TIME EXIT"
 
     if exit_reason is None:
         print("Trade still open")
@@ -73,6 +85,7 @@ def check_exit():
     df.loc[df.index[-1], "exit_ce"] = ce_price
     df.loc[df.index[-1], "exit_pe"] = pe_price
     df.loc[df.index[-1], "pnl"] = total_pnl
+    df.loc[df.index[-1], "exit_reason"] = exit_reason
 
     df.to_csv(LOG_FILE, index=False)
 
@@ -82,8 +95,8 @@ def check_exit():
 
 🚨 {exit_reason}
 
-CE Exit: ₹{ce_price}
-PE Exit: ₹{pe_price}
+CE Exit: ₹{round(ce_price, 2)}
+PE Exit: ₹{round(pe_price, 2)}
 
 💰 PnL: ₹{round(total_pnl, 2)}
 """
