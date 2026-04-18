@@ -112,14 +112,10 @@ def run_once():
 
     print("Running Suryanomics bot (single cycle)\n")
 
-    # =================================================
-    # STEP 1 → EXIT CHECK FIRST
-    # =================================================
+    # STEP 1 → EXIT CHECK
     check_exit()
 
-    # =================================================
-    # STEP 2 → ENTRY LOGIC
-    # =================================================
+    # STEP 2 → ENTRY
 
     if already_traded_today():
         print("WARNING: Trade already taken today - skipping")
@@ -146,7 +142,7 @@ def run_once():
     print(f"Day Type: {day_type}")
     print(f"ADX: {adx}")
 
-    # 🔥 FINAL CORRECT CONDITION (BUG FIXED)
+    # ✅ CORRECT CONTROL FLOW
     if strategy == "SHORT_STRANGLE" and is_trade_allowed(day_type, adx):
 
         print("TRADE ALLOWED")
@@ -162,6 +158,16 @@ def run_once():
 
     else:
         print("NO TRADE")
+
+        # OPTIONAL (you can remove later)
+        send_message(f"""
+📊 SURYANOMICS OPTIONS
+
+No trade signal today
+
+Regime: {regime}
+ADX: {round(adx, 2)}
+""")
 
 
 # =====================================================
