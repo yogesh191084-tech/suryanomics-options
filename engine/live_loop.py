@@ -52,7 +52,8 @@ def is_trade_allowed(day_type, adx):
     if adx is None or pd.isna(adx):
         return False
 
-    return adx < 20
+    # 🔥 Balanced system (updated)
+    return adx < 23
 
 
 def already_traded_today():
@@ -108,12 +109,10 @@ Target: ₹{trade['pe']['target']}
 # =====================================================
 
 def run_once():
-    # 🔥 TEST MESSAGE
-    send_message("🚀 TELEGRAM TEST WORKING")
 
     print("Running Suryanomics bot (single cycle)\n")
 
-    # Skip duplicate
+    # Skip duplicate trade
     if already_traded_today():
         print("WARNING: Trade already taken today - skipping")
         return
@@ -146,7 +145,10 @@ def run_once():
 
         trade = build_short_strangle(price)
 
+        # Send Telegram
         send_trade_alert(trade)
+
+        # Log trade
         log_trade(trade)
 
         print("Trade logged successfully")
