@@ -116,7 +116,7 @@ def run_once():
 
     # ❌ Skip if already traded today
     if already_traded_today():
-        print(⚠️ Trade already taken today — skipping")
+        print("WARNING: Trade already taken today - skipping")
         return
 
     df = fetch_spot_5m(SYMBOL)
