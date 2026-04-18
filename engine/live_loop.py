@@ -1,6 +1,6 @@
 import os
 import sys
-from datetime import datetime, time as dtime
+from datetime import datetime
 from collections import Counter
 
 import pandas as pd
@@ -12,10 +12,12 @@ from indicators.trend import add_trend_indicators
 from engine.regime import detect_market_regime
 from engine.strategy_selector import select_strategy
 from engine.option_engine import build_short_strangle
+from engine.trade_logger import log_trade
 from telegram.sender import send_message
 
 
 SYMBOL = "NIFTY"
+LOG_FILE = "logs/trades.csv"
 
 
 # =====================================================
@@ -43,9 +45,6 @@ def classify_day(regimes):
 
 
 def is_trade_allowed(day_type, adx):
-    """
-    FINAL FILTER LOGIC
-    """
 
     if day_type == "TREND_DAY":
         return False
@@ -53,11 +52,29 @@ def is_trade_allowed(day_type, adx):
     if adx is None or pd.isna(adx):
         return False
 
-    # Allow RANGE + controlled MIXED
-    if adx < 20:
-        return True
+    # RANGE + controlled MIXED
+    return adx < 20
 
-    return False
+
+def already_traded_today():
+    """
+    Prevent duplicate trades in same day
+    """
+
+    if not os.path.exists(LOG_FILE):
+        return False
+
+    try:
+        df = pd.read_csv(LOG_FILE)
+        today = datetime.now().strftime("%Y-%m-%d")
+
+        if "date" not in df.columns:
+            return False
+
+        return (df["date"] == today).any()
+
+    except Exception:
+        return False
 
 
 # =====================================================
@@ -91,11 +108,16 @@ Target: ₹{trade['pe']['target']}
 
 
 # =====================================================
-# SINGLE RUN (GITHUB SAFE)
+# MAIN RUN (GITHUB SAFE)
 # =====================================================
 
 def run_once():
     print("Running Suryanomics bot (single cycle)\n")
+
+    # ❌ Skip if already traded today
+    if already_traded_today():
+        print(⚠️ Trade already taken today — skipping")
+        return
 
     df = fetch_spot_5m(SYMBOL)
 
@@ -126,7 +148,13 @@ def run_once():
 
         trade = build_short_strangle(price)
 
+        # ✅ Send Telegram
         send_trade_alert(trade)
+
+        # ✅ Log Trade
+        log_trade(trade)
+
+        print("📊 Trade logged successfully")
 
     else:
         print("❌ NO TRADE")
