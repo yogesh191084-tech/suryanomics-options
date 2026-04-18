@@ -16,7 +16,7 @@ from engine.trade_logger import log_trade
 from engine.exit_engine import check_exit
 from telegram.sender import send_message
 from engine.volatility import is_low_volatility
-from engine.risk_manager import is_daily_loss_exceeded   # ✅ NEW
+from engine.risk_manager import is_daily_loss_exceeded
 
 
 SYMBOL = "NIFTY"
@@ -55,7 +55,6 @@ def is_trade_allowed(day_type, adx):
     if adx is None or pd.isna(adx):
         return False
 
-    # 🔥 Balanced safe filter
     return 10 < adx < 23
 
 
@@ -107,19 +106,6 @@ Regime + Volatility filtered execution
     send_message(msg)
 
 
-def send_no_trade_message(regime, adx):
-
-    msg = f"""
-SURYANOMICS OPTIONS
-
-No trade signal
-
-Regime: {regime}
-ADX: {round(adx, 2)}
-"""
-    send_message(msg)
-
-
 def send_risk_stop_message():
 
     msg = """
@@ -141,29 +127,21 @@ def run_once():
     print("Running Suryanomics bot (single cycle)\n")
 
     try:
-        # =================================================
         # STEP 1 → EXIT CHECK
-        # =================================================
         check_exit()
 
-        # =================================================
-        # STEP 2 → RISK CONTROL (MOST IMPORTANT)
-        # =================================================
+        # STEP 2 → RISK CONTROL
         if is_daily_loss_exceeded():
             print("DAILY LOSS LIMIT HIT - STOP TRADING")
             send_risk_stop_message()
             return
 
-        # =================================================
         # STEP 3 → PREVENT MULTIPLE TRADES
-        # =================================================
         if already_traded_today():
             print("Trade already taken today - skipping")
             return
 
-        # =================================================
         # STEP 4 → FETCH DATA
-        # =================================================
         df = fetch_spot_5m(SYMBOL)
 
         if df is None or df.empty:
@@ -185,9 +163,7 @@ def run_once():
         print(f"Day Type: {day_type}")
         print(f"ADX: {adx}")
 
-        # =================================================
-        # STEP 5 → FINAL ENTRY CONDITION
-        # =================================================
+        # FINAL ENTRY
         if (
             strategy == "SHORT_STRANGLE"
             and is_trade_allowed(day_type, adx)
@@ -207,7 +183,7 @@ def run_once():
 
         else:
             print("NO TRADE")
-            send_no_trade_message(regime, adx)
+            # ❌ NO TELEGRAM MESSAGE HERE (FIXED)
 
     except Exception as e:
         print("ERROR:", e)
