@@ -1,4 +1,3 @@
-import time
 import os
 import sys
 from datetime import datetime, time as dtime
@@ -17,7 +16,6 @@ from telegram.sender import send_message
 
 
 SYMBOL = "NIFTY"
-MARKET_CLOSE_TIME = dtime(15, 30)
 
 
 # =====================================================
@@ -42,6 +40,24 @@ def classify_day(regimes):
         return "TREND_DAY"
     else:
         return "MIXED_DAY"
+
+
+def is_trade_allowed(day_type, adx):
+    """
+    FINAL FILTER LOGIC
+    """
+
+    if day_type == "TREND_DAY":
+        return False
+
+    if adx is None or pd.isna(adx):
+        return False
+
+    # Allow RANGE + controlled MIXED
+    if adx < 20:
+        return True
+
+    return False
 
 
 # =====================================================
@@ -69,73 +85,51 @@ Entry: ₹{trade['pe']['entry']}
 SL: ₹{trade['pe']['sl']}  
 Target: ₹{trade['pe']['target']}
 
-⚡ System-based execution
+⚡ Regime-filtered execution
 """
     send_message(msg)
 
 
 # =====================================================
-# MAIN LOOP
+# SINGLE RUN (GITHUB SAFE)
 # =====================================================
 
-def start_live_loop(sleep_seconds=60):
-    print("🚀 Suryanomics Live Trading Started\n")
+def run_once():
+    print("Running Suryanomics bot (single cycle)\n")
 
-    day_regimes = []
-    signal_sent = False
+    df = fetch_spot_5m(SYMBOL)
 
-    while True:
-        now = datetime.now()
-        print(f"\n--- Live Cycle @ {now} ---")
+    if df is None or df.empty:
+        print("No data")
+        return
 
-        if now.time() >= MARKET_CLOSE_TIME:
-            print("Market closed")
-            break
+    df = add_trend_indicators(df)
+    row = df.iloc[-1]
 
-        df = fetch_spot_5m(SYMBOL)
+    adx = row.get("adx")
 
-        if df is None or df.empty:
-            print("No data")
-            time.sleep(sleep_seconds)
-            continue
+    regime = detect_market_regime(row)
+    strategy = select_strategy(regime)
 
-        df = add_trend_indicators(df)
-        row = df.iloc[-1]
+    day_type = classify_day([regime])
 
-        if pd.isna(row.get("adx")):
-            print("Indicators not ready")
-            time.sleep(sleep_seconds)
-            continue
+    print(f"Regime: {regime}")
+    print(f"Day Type: {day_type}")
+    print(f"ADX: {adx}")
 
-        regime = detect_market_regime(row)
-        strategy = select_strategy(regime)
+    # ===== FINAL DECISION =====
+    if is_trade_allowed(day_type, adx):
 
-        day_regimes.append(regime)
-        day_type = classify_day(day_regimes)
+        print("✅ TRADE ALLOWED")
 
-        print(f"Regime: {regime}")
-        print(f"Strategy: {strategy}")
-        print(f"Day Type: {day_type}")
+        price = row.get("close", 0)
 
-        # ===== REAL SIGNAL =====
-        if not signal_sent:
+        trade = build_short_strangle(price)
 
-            print("✅ VALID TRADE CONDITION")
+        send_trade_alert(trade)
 
-            if not signal_sent:
-                price = row.get("close", 0)
-
-                trade = build_short_strangle(price)
-
-                send_trade_alert(trade)
-
-                signal_sent = True
-                print("🚀 TRADE SENT TO TELEGRAM")
-
-        else:
-            print("❌ NO TRADE")
-
-        time.sleep(sleep_seconds)
+    else:
+        print("❌ NO TRADE")
 
 
 # =====================================================
@@ -143,4 +137,4 @@ def start_live_loop(sleep_seconds=60):
 # =====================================================
 
 if __name__ == "__main__":
-    start_live_loop()
+    run_once()
