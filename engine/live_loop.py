@@ -15,6 +15,8 @@ from engine.option_engine import build_short_strangle
 from engine.trade_logger import log_trade
 from engine.exit_engine import check_exit
 from telegram.sender import send_message
+from engine.volatility import is_low_volatility
+from engine.risk_manager import is_daily_loss_exceeded   # ✅ NEW
 
 
 SYMBOL = "NIFTY"
@@ -53,7 +55,8 @@ def is_trade_allowed(day_type, adx):
     if adx is None or pd.isna(adx):
         return False
 
-    return adx < 23
+    # 🔥 Balanced safe filter
+    return 10 < adx < 23
 
 
 def already_traded_today():
@@ -81,25 +84,50 @@ def already_traded_today():
 def send_trade_alert(trade):
 
     msg = f"""
-📊 SURYANOMICS OPTIONS – LIVE TRADE
+SURYANOMICS OPTIONS - LIVE TRADE
 
-🚨 SHORT STRANGLE ACTIVATED
+SHORT STRANGLE ACTIVATED
 
-Spot: ₹{round(trade['spot'], 2)}
+Spot: Rs {round(trade['spot'], 2)}
 
-📉 CE SELL
-Strike: {trade['ce']['strike']} CE  
-Entry: ₹{trade['ce']['entry']}  
-SL: ₹{trade['ce']['sl']}  
-Target: ₹{trade['ce']['target']}
+CE SELL
+Strike: {trade['ce']['strike']} CE
+Entry: Rs {trade['ce']['entry']}
+SL: Rs {trade['ce']['sl']}
+Target: Rs {trade['ce']['target']}
 
-📉 PE SELL
-Strike: {trade['pe']['strike']} PE  
-Entry: ₹{trade['pe']['entry']}  
-SL: ₹{trade['pe']['sl']}  
-Target: ₹{trade['pe']['target']}
+PE SELL
+Strike: {trade['pe']['strike']} PE
+Entry: Rs {trade['pe']['entry']}
+SL: Rs {trade['pe']['sl']}
+Target: Rs {trade['pe']['target']}
 
-⚡ Regime-filtered execution
+Regime + Volatility filtered execution
+"""
+    send_message(msg)
+
+
+def send_no_trade_message(regime, adx):
+
+    msg = f"""
+SURYANOMICS OPTIONS
+
+No trade signal
+
+Regime: {regime}
+ADX: {round(adx, 2)}
+"""
+    send_message(msg)
+
+
+def send_risk_stop_message():
+
+    msg = """
+SURYANOMICS OPTIONS
+
+Daily loss limit hit
+
+System stopped for today
 """
     send_message(msg)
 
@@ -112,62 +140,77 @@ def run_once():
 
     print("Running Suryanomics bot (single cycle)\n")
 
-    # STEP 1 → EXIT CHECK
-    check_exit()
+    try:
+        # =================================================
+        # STEP 1 → EXIT CHECK
+        # =================================================
+        check_exit()
 
-    # STEP 2 → ENTRY
+        # =================================================
+        # STEP 2 → RISK CONTROL (MOST IMPORTANT)
+        # =================================================
+        if is_daily_loss_exceeded():
+            print("DAILY LOSS LIMIT HIT - STOP TRADING")
+            send_risk_stop_message()
+            return
 
-    if already_traded_today():
-        print("WARNING: Trade already taken today - skipping")
-        return
+        # =================================================
+        # STEP 3 → PREVENT MULTIPLE TRADES
+        # =================================================
+        if already_traded_today():
+            print("Trade already taken today - skipping")
+            return
 
-    df = fetch_spot_5m(SYMBOL)
+        # =================================================
+        # STEP 4 → FETCH DATA
+        # =================================================
+        df = fetch_spot_5m(SYMBOL)
 
-    if df is None or df.empty:
-        print("No data")
-        return
+        if df is None or df.empty:
+            print("No data")
+            return
 
-    df = add_trend_indicators(df)
-    row = df.iloc[-1]
+        df = add_trend_indicators(df)
+        row = df.iloc[-1]
 
-    adx = row.get("adx")
+        adx = row.get("adx")
 
-    regime = detect_market_regime(row)
-    strategy = select_strategy(regime)
+        regime = detect_market_regime(row)
+        strategy = select_strategy(regime)
 
-    day_type = classify_day([regime])
+        day_type = classify_day([regime])
 
-    print(f"Regime: {regime}")
-    print(f"Strategy: {strategy}")
-    print(f"Day Type: {day_type}")
-    print(f"ADX: {adx}")
+        print(f"Regime: {regime}")
+        print(f"Strategy: {strategy}")
+        print(f"Day Type: {day_type}")
+        print(f"ADX: {adx}")
 
-    # ✅ CORRECT CONTROL FLOW
-    if strategy == "SHORT_STRANGLE" and is_trade_allowed(day_type, adx):
+        # =================================================
+        # STEP 5 → FINAL ENTRY CONDITION
+        # =================================================
+        if (
+            strategy == "SHORT_STRANGLE"
+            and is_trade_allowed(day_type, adx)
+            and is_low_volatility(df)
+        ):
 
-        print("TRADE ALLOWED")
+            print("TRADE ALLOWED")
 
-        price = row.get("close", 0)
+            price = row.get("close", 0)
 
-        trade = build_short_strangle(price)
+            trade = build_short_strangle(price)
 
-        send_trade_alert(trade)
-        log_trade(trade)
+            send_trade_alert(trade)
+            log_trade(trade)
 
-        print("Trade logged successfully")
+            print("Trade logged successfully")
 
-    else:
-        print("NO TRADE")
+        else:
+            print("NO TRADE")
+            send_no_trade_message(regime, adx)
 
-        # OPTIONAL (you can remove later)
-        send_message(f"""
-📊 SURYANOMICS OPTIONS
-
-No trade signal today
-
-Regime: {regime}
-ADX: {round(adx, 2)}
-""")
+    except Exception as e:
+        print("ERROR:", e)
 
 
 # =====================================================
