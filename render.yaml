@@ -1,0 +1,9 @@
+services:
+  - type: worker
+    name: suryanomics-options
+    runtime: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python -m engine.live_loop"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10
