@@ -13,7 +13,7 @@ from engine.regime import detect_market_regime
 from engine.strategy_selector import select_strategy
 from engine.option_engine import build_short_strangle
 from engine.trade_logger import log_trade
-from engine.exit_engine import check_exit   # ✅ NEW
+from engine.exit_engine import check_exit
 from telegram.sender import send_message
 
 
@@ -113,7 +113,7 @@ def run_once():
     print("Running Suryanomics bot (single cycle)\n")
 
     # =================================================
-    # STEP 1 → CHECK EXIT FIRST (VERY IMPORTANT)
+    # STEP 1 → EXIT CHECK FIRST
     # =================================================
     check_exit()
 
@@ -142,10 +142,12 @@ def run_once():
     day_type = classify_day([regime])
 
     print(f"Regime: {regime}")
+    print(f"Strategy: {strategy}")
     print(f"Day Type: {day_type}")
     print(f"ADX: {adx}")
 
-    if is_trade_allowed(day_type, adx):
+    # 🔥 FINAL CORRECT CONDITION (BUG FIXED)
+    if strategy == "SHORT_STRANGLE" and is_trade_allowed(day_type, adx):
 
         print("TRADE ALLOWED")
 
