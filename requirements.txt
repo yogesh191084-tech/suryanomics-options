@@ -1,4 +1,6 @@
 pandas
 numpy
+requests
 ta
 python-dateutil
+yfinance
